@@ -120,6 +120,228 @@ loc_F9B:
     rsp           ; reset stack pointer (SP <= $FF)
     jsr sub_11B3  ; PLL init?
 
+
+    org $1274
+;--------------------------------------------------------------------------
+; Here we'll process the incoming packets.
+;--------------------------------------------------------------------------
+sub_1274:
+    brset  PB3, PORTB, loc_12DF
+    bclr   2, byte_A2
+    clr    byte_B5
+    jsr    sub_1488
+    bcs    loc_12DF
+    jsr    sub_1488
+    bcs    loc_12DF
+    lda    byte_BA
+    sta    byte_B8
+    lda    byte_B9
+    sta    byte_B7
+    bne    loc_1292     ; go if we got a non-ADB packet
+    jmp    HandleADBpkt ; otherwise, treat it as an ADB packet
+
+loc_1292:
+    cmp    #1           ; is it a Cuda packet?
+    beq    CmdDispatch  ; then process it
+    lda    #1
+    bra    loc_12A9
+
+loc_129A:
+    lda    byte_B7
+    sta    byte_B9
+    lda    byte_B8
+    sta    byte_BA
+    lda    #3
+    jsr    loc_12A9
+    sec
+    rts
+
+loc_12A9:
+    sta    byte_93
+    lda    byte_B7
+    sta    byte_BB
+    lda    byte_B8
+    sta    byte_99
+    lda    #2
+    sta    byte_B9
+    lda    byte_93
+    sta    byte_BA
+    lda    #1
+    sta    byte_97
+    sta    byte_96
+    jmp    loc_13E7
+
+    ; ---------------------------------------------------------
+    ; Dispatch for Cuda pseudo commands.
+    ; ---------------------------------------------------------
+CmdDispatch:
+    lda    byte_BA      ; A - Cuda pseudo commandID
+    cmp    #$25         ; is the commandID >= 0x25 ?
+    bcc    InvalidCmd   ; then it's invalid
+    sta    byte_93      ;
+    asla                ;
+    add    byte_93      ; A = commandID * 3
+    tax                 ; X = A
+    jmp    CmdJT, x     ; jump to the command handler
+
+InvalidCmd:
+    clr    byte_B5
+    jsr    sub_1488
+    bcc    InvalidCmd
+    lda    #2
+    jmp    loc_12A9
+
+loc_12DF:
+    jsr    sub_15E1
+    sec
+    rts
+
+    ; --------------------------------------------------------------
+    ; Jump table for Cuda pseudo commands.
+    ; Cuda shares the commands with its predecessor - Egret ASIC but
+    ; Cuda does support only a subset of Egret commands.
+    ; --------------------------------------------------------------
+CmdJT:
+    jmp     loc_1751    ; NopCmd (0x00)
+    jmp     loc_1764    ; APoll    (0x01)
+    jmp     loc_1781    ; Rd6805addr (0x02)
+    jmp     loc_17B2    ; RdTime (0x03)
+    jmp     InvalidCmd  ; RdRomSize (0x04)   - unimplemented in Cuda
+    jmp     InvalidCmd  ; RdRomBase (0x05)   - unimplemented in Cuda
+    jmp     InvalidCmd  ; RdRomHeader (0x06) - unimplemented in Cuda
+    jmp     loc_17EA    ; RdPram (0x07)
+    jmp     loc_1830    ; Wr6805Addr (0x08)
+    jmp     loc_1858    ; WrTime (0x09)
+    jmp     loc_1872    ; PwrDown (0x0A)
+    jmp     loc_1883    ; WrPwrupTime (0x0B)
+    jmp     loc_189B    ; WrPram (0x0C)
+    jmp     loc_18D0    ; MonoReset (0x0D)
+    jmp     loc_18E5    ; WrDFAC / WrIIC (0x0E)
+    jmp     InvalidCmd  ; Egretdiags (0x0F)  - unimplemented in Cuda
+    jmp     loc_1A03    ; RdCtlPanel / RdBattery (0x10)
+    jmp     loc_1A1C    ; ResetEgret (0x11)
+    jmp     loc_1A2A    ; EnDisVpp / SetIPL (0x12)
+    jmp     loc_1A3F    ; EnDisFiles (0x13)
+    jmp     loc_1A54    ; SetAutopoll (0x14)
+    jmp     InvalidCmd  ; RdPramSize (0x15)  - unimplemented in Cuda
+    jmp     loc_1A65    ; RdAutoRate (0x16)
+    jmp     InvalidCmd  ; WrBusDelay (0x17)  - unimplemented in Cuda
+    jmp     InvalidCmd  ; RdBusDelay (0x18)  - unimplemented in Cuda
+    jmp     loc_1A7B    ; WrDevList (0x19)
+    jmp     loc_1A90    ; RdDevList (0x1A)
+    jmp     loc_1AAD    ; Wr1SecMode (0x1B)
+    jmp     InvalidCmd  ; EnDisKbdNmi (0x1C) - unimplemented in Cuda
+    jmp     InvalidCmd  ; EnDisParse (0x1D)  - unimplemented in Cuda
+    jmp     InvalidCmd  ; WrHangTout (0x1E)  - unimplemented in Cuda
+    jmp     InvalidCmd  ; RdHangTout (0x1F)  - unimplemented in Cuda
+    jmp     InvalidCmd  ; SetDefDFAC (0x20)  - unimplemented in Cuda
+    jmp     loc_1B11    ; EnDisPDM (0x21)
+    jmp     loc_192C    ; DFACorIIC (0x22)
+    jmp     loc_1B5E    ; WakeUpMode (0x23)
+    jmp     loc_1B74    ; TimerTickle (0x24)
+
+BadADBCmd:
+    jmp    InvalidCmd
+
+    ; --------------------------------------------------------------
+    ; Here we'll process ADB packets.
+    ; --------------------------------------------------------------
+HandleADBpkt:
+    lda    byte_B8      ; check if ADB SendReset command is requested
+    and    #$F          ; ADB Command and device register will be 0 in this case
+    beq    ADBSendReset ; go if the SendReset cmd is requested
+    cmp    #1           ;
+    beq    ADBFlush     ; go if the Flush command is requested
+    cmp    #8           ; is (ADB command + dev register) < 8?
+    bcs    BadADBCmd    ; then it's an invalid ADB command
+    cmp    #$C          ; if (ADB command + dev register) > 0xC ?
+    bcc    ADBTalk      ; then go to process the ADB Talk command
+
+    ; --------------------------------------------------------------
+    ; Otherwise, process the ADB Listen command.
+    ; --------------------------------------------------------------
+    clr    byte_B5
+
+loc_136A:
+    ldx    byte_B5
+    cpx    #8
+    bls    loc_1372
+    dec    byte_B5
+
+loc_1372:
+    jsr    sub_1488
+    bcc    loc_136A
+    jsr    sub_144B
+    ldx    byte_B5
+    cpx    #2
+    bcs    loc_1391
+    stx    byte_96
+    decx
+
+loc_1383:
+    lda    byte_B9, x
+    sta    byte_99, x
+    decx
+    bpl    loc_1383
+    lda    byte_B8
+    jsr    sub_1CB8
+    bra    loc_13C0
+
+loc_1391:
+    lda    #3
+    jmp    loc_12A9
+
+ADBSendReset:
+    jsr    sub_1488
+    bcc    loc_13D2
+    lda    #$30
+    sta    byte_B3
+    lda    #$20
+    sta    byte_B4
+
+    ; --------------------------------------------------------------------
+    ; We're going to reset the ADB bus now. According to the ADB protocol
+    ; specification, we need to hold the ADB bus low for 3 ms to force all
+    ; attached devices to reset themselves.
+    ; --------------------------------------------------------------------
+    bset   PA7, PORTA       ; set ADB data line out low
+    ldx    #3               ;
+    jsr    DelayXMillisecs  ; wait for 3 ms
+    bclr   PA7, PORTA       ; set ADB data line out high
+    ldx    #$1B             ; wait for another
+    jsr    TenCyclesLoop    ; 135 µs
+    bra    loc_13C0
+
+ADBFlush:
+    jsr    sub_1488
+    bcc    loc_13D2
+    jsr    sub_144B
+    lda    byte_B8
+    jsr    sub_1CB8
+
+loc_13C0:
+    jmp    sub_161E
+
+    ; --------------------------------------------------------------
+    ; Process the ADB Talk command.
+    ; --------------------------------------------------------------
+ADBTalk:
+    jsr    sub_1488
+    bcc    loc_13D2
+    jsr    sub_144B
+    lda    byte_B8
+    jsr    sub_1CB8
+    bra    sub_13DD
+
+loc_13D2:
+    lda    #3
+    sta    byte_B5
+    jsr    sub_1488
+    bcc    loc_13D2
+    bra    loc_1391
+
+
+
     org $1E18
 
 ;------------------------------------------------------------------
