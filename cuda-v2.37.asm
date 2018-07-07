@@ -195,7 +195,7 @@ loc_1E42:
         rts                     ; and return
 
 ;----------------------------------------------------------------
-; This subroutine will wait for at least 10 milliseconds.
+; This subroutine will wait for at least 100 milliseconds.
 ; The real delay is a bit longer - we need to add the additional
 ; 14 cycles for loading the counter + call + ret.
 ; Params: X - number of milliseconds to wait
@@ -229,8 +229,8 @@ loc_1E51:
         fcb   0             ; reserved
         fcb   0             ; reserved
         fcb   0             ; reserved
-        fdb CPIHandler     ; Custom Periodic Interrupt
-        fdb TIHandler    ; Timer Interrupt
-        fdb IRQHandler   ; IRQ/IRQ2
-        fdb 0             ; SWI (unused)
-        fdb ColdStart     ; Cuda HW Reset
+        fdb CPIHandler      ; Custom Periodic Interrupt
+        fdb TIHandler       ; Timer Interrupt
+        fdb IRQHandler      ; IRQ/IRQ2
+        fdb 0               ; SWI (unused)
+        fdb ColdStart       ; Cuda HW Reset
