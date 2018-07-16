@@ -203,7 +203,7 @@ loc_12DF:
     ; --------------------------------------------------------------
 CmdJT:
     jmp     loc_1751    ; NopCmd (0x00)
-    jmp     loc_1764    ; APoll    (0x01)
+    jmp     loc_1764    ; APoll (0x01)
     jmp     loc_1781    ; Rd6805addr (0x02)
     jmp     loc_17B2    ; RdTime (0x03)
     jmp     InvalidCmd  ; RdRomSize (0x04)   - unimplemented in Cuda
@@ -348,6 +348,7 @@ loc_13D2:
 ; Generic delay subroutine that spends 10 * X cycles.
 ; To get the real number of cycles spent, add additional 14 cycles
 ; for loading the counter + call + ret.
+; Params: X - number of n * 10 cycles to spend
 ;------------------------------------------------------------------
 TenCyclesLoop:
     nop
@@ -403,7 +404,6 @@ doNothing:
 ; the high-speed (2.097 MHz) mode.
 ; The real delay is a bit longer - we need to add the additional
 ; 14 cycles for loading the counter + call + ret.
-; Params: X - number of milliseconds to wait
 ;----------------------------------------------------------------
 Delay10Millisecs:
     brset  BCS, PLLC, loc_1E42 ; go if we're running at the high speed
@@ -420,7 +420,6 @@ loc_1E42:
 ; This subroutine will wait for at least 100 milliseconds.
 ; The real delay is a bit longer - we need to add the additional
 ; 14 cycles for loading the counter + call + ret.
-; Params: X - number of milliseconds to wait
 ;----------------------------------------------------------------
 Delay100Millisecs:
     brset  BCS, PLLC, loc_1E51 ; go if we're running at the high speed
