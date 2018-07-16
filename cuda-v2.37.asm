@@ -10,10 +10,8 @@
     fcb     0
     fcb     0
     fcb     $19
-    fcb     0
-    fcb     2
-    fcb     0
-    fcb     $25
+    fdb     $2  ; Cuda firmware major version (2.)
+    fdb     $25 ; Cuda firmware minor version (.37)
     fcb     1
     fcb     0
     fcb     0
